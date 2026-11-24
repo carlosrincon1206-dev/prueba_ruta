@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inventario Vial de la Provincia de Mendoza (prototipo)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--y:#ffc800;--k:#26262a;--bg:#efeeea;--card:#fff;--line:#dcdad3;--txt:#222;--mut:#6b6a66;--ok:#5aa832;--warn:#ffc800;--bad:#e0353b}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:"Barlow Semi Condensed","Arial Narrow",Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:16px}
+header{background:var(--k);color:#fff;padding:14px 24px;border-top:8px solid transparent;border-image:repeating-linear-gradient(135deg,var(--y) 0 14px,var(--k) 14px 28px) 8}
+header h1{margin:0;font-size:1.9rem;font-weight:700;line-height:1.1}
+header p{margin:2px 0 0;color:#b9b8b3;font-size:1.1rem}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 24px;background:var(--card);border-bottom:1px solid var(--line)}
+.bar label{font-weight:700;display:flex;gap:8px;align-items:center}
+select{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;min-width:150px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.tab{font:inherit;font-weight:600;padding:9px 16px;border:1px solid var(--line);border-radius:8px;background:#f1f0ec;cursor:pointer}
+.tab[aria-selected=true]{background:var(--y);border-color:var(--y)}
+.tab:focus-visible,select:focus-visible{outline:3px solid var(--k);outline-offset:2px}
+main{display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.15fr);gap:16px;padding:16px 24px}
+#map{height:calc(100vh - 190px);min-height:460px;border-radius:10px;border:1px solid var(--line)}
+.panel{display:flex;flex-direction:column;gap:12px}
+.ttl{background:var(--k);color:#fff;padding:12px 18px;border-radius:10px}
+.ttl small{display:block;font-size:1rem;font-weight:600}
+.ttl strong{display:block;font-size:1.8rem;color:var(--y);line-height:1.1}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center}
+.kpi b{display:block;font-size:1.5rem}
+.kpi span{color:var(--mut)}
+.kpi.main{background:#fff0b3;border-color:var(--y)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h3{margin:0 0 8px;font-size:1.15rem}
+.cv{position:relative;height:170px}
+.leg{list-style:none;margin:8px 0 0;padding:0}
+.leg li{display:flex;align-items:center;gap:8px;padding:2px 0}
+.leg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.leg em{margin-left:auto;font-style:normal;font-weight:600}
+.note{color:var(--mut);font-size:.9rem;text-align:right}
+#soon{display:none;background:var(--card);border:1px dashed var(--mut);border-radius:10px;padding:24px;color:var(--mut)}
+@media(max-width:900px){main{grid-template-columns:1fr}#map{height:55vh}.kpis{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}.tabs{margin-left:0}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Inventario Vial de la Provincia de Mendoza</h1>
+  <p>Infraestructura vial y alumbrado público</p>
+</header>
+
+<div class="bar">
+  <label>Departamento <select id="selDepto"></select></label>
+  <label>Ruta <select id="selRuta"></select></label>
+  <div class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" aria-selected="true" data-t="Rutas">Rutas</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="Alumbrado">Alumbrado</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="Señales viales">Señales viales</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="Obras de arte">Obras de arte</button>
+    <button class="tab" role="tab" aria-selected="false" data-t="Laterales viales">Laterales viales</button>
+  </div>
+</div>
+
+<main>
+  <div id="map" aria-label="Mapa de la red vial"></div>
+  <section class="panel">
+    <div class="ttl"><small id="tSmall">Inventario: Rutas</small><strong>Red vial relevada</strong></div>
+    <div id="soon">Esta pestaña se arma igual que Rutas: se agrega su capa GeoJSON y la función que calcula sus estadísticas.</div>
+    <div id="stats" class="panel">
+      <div class="kpis">
+        <div class="kpi main"><b id="kTot">–</b><span>Total relevado</span></div>
+        <div class="kpi"><b id="kNac">–</b><span>Red Nacional</span></div>
+        <div class="kpi"><b id="kPri">–</b><span>Red Provincial Primaria</span></div>
+        <div class="kpi"><b id="kSec">–</b><span>Red Provincial Secundaria</span></div>
+      </div>
+      <div class="row">
+        <div class="card"><h3>Kilómetros por materialidad</h3><div class="cv"><canvas id="cMat"></canvas></div></div>
+        <div class="card"><h3>Estado de conservación (rutas pavimentadas)</h3>
+          <div class="cv" style="height:120px"><canvas id="cEst"></canvas></div>
+          <ul class="leg" id="lEst"></ul></div>
+      </div>
+      <div class="card"><h3>Kilómetros por jurisdicción vial</h3>
+        <div style="display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center">
+          <div class="cv" style="height:140px"><canvas id="cJur"></canvas></div>
+          <ul class="leg" id="lJur"></ul>
+        </div>
+      </div>
+      <div class="note">Datos de ejemplo: trazas aproximadas para probar el prototipo.</div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+/* ============ DATOS ============
+   Reemplazá este bloque por tu GeoJSON exportado desde QGIS:
+   fetch('data/rutas.geojson').then(r=>r.json()).then(init)
+   Campos esperados: nombre, jur (Nacional|Primaria|Secundaria),
+   mat (Pavimento|Consolidado|Suelo natural), est (Bueno|Regular|Malo), depto */
+const L1=(nombre,jur,mat,est,depto,c)=>({type:"Feature",properties:{nombre,jur,mat,est,depto},geometry:{type:"LineString",coordinates:c}});
+const DATA={type:"FeatureCollection",features:[
+L1("RN 7 (tramo Capital)","Nacional","Pavimento","Bueno","Capital",[[-68.84,-32.89],[-68.6,-33.05]]),
+L1("RN 7 (tramo San Martín)","Nacional","Pavimento","Regular","San Martín",[[-68.6,-33.05],[-68.47,-33.08],[-67.9,-33.2]]),
+L1("RN 40 Norte","Nacional","Pavimento","Regular","Lavalle",[[-68.84,-32.89],[-68.78,-32.5],[-68.7,-32.1]]),
+L1("RN 40 Centro","Nacional","Pavimento","Bueno","Tunuyán",[[-68.84,-32.89],[-69.0,-33.57],[-69.05,-33.77]]),
+L1("RN 40 San Rafael","Nacional","Pavimento","Malo","San Rafael",[[-69.05,-33.77],[-68.7,-34.3],[-68.33,-34.62]]),
+L1("RN 40 Malargüe","Nacional","Pavimento","Regular","Malargüe",[[-68.33,-34.62],[-68.9,-35.2],[-69.58,-35.47],[-69.7,-36.2]]),
+L1("RN 143","Nacional","Pavimento","Bueno","General Alvear",[[-68.33,-34.62],[-68.0,-34.85],[-67.69,-34.98]]),
+L1("RN 188","Nacional","Pavimento","Regular","General Alvear",[[-67.69,-34.98],[-66.9,-35.0]]),
+L1("RP 50","Primaria","Pavimento","Bueno","San Martín",[[-68.47,-33.08],[-68.5,-33.4],[-68.3,-33.7]]),
+L1("RP 82","Primaria","Pavimento","Regular","Tunuyán",[[-69.0,-33.57],[-69.3,-33.4],[-69.4,-33.1]]),
+L1("RP 153","Primaria","Pavimento","Malo","Lavalle",[[-68.78,-32.5],[-68.2,-32.5],[-67.8,-32.6]]),
+L1("RP 143","Primaria","Consolidado","Regular","San Rafael",[[-68.33,-34.62],[-68.9,-34.6],[-69.4,-34.7]]),
+L1("RP 222","Secundaria","Consolidado","Regular","Malargüe",[[-69.58,-35.47],[-69.2,-35.9],[-68.8,-36.1]]),
+L1("RP 205","Secundaria","Suelo natural","Regular","San Martín",[[-68.2,-33.15],[-68.0,-33.6],[-67.7,-33.8]]),
+L1("RP 179","Secundaria","Suelo natural","Regular","Tunuyán",[[-69.05,-33.77],[-68.7,-33.95],[-68.5,-34.1]]),
+L1("RP 190","Secundaria","Consolidado","Regular","General Alvear",[[-67.69,-34.98],[-67.5,-35.4],[-67.3,-35.8]])
+]};
+
+/* ============ UTILIDADES ============ */
+const fmt=n=>n.toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})+' km';
+const pct=(n,t)=>t?fmt(n).replace(' km','')+'':'0';
+const pc=(n,t)=>(t?(100*n/t):0).toLocaleString('es-AR',{maximumFractionDigits:1})+'%';
+function km(coords){let s=0;const R=6371,r=Math.PI/180;
+  for(let i=1;i<coords.length;i++){const[a,b]=coords[i-1],[c,d]=coords[i];
+    const dl=(d-b)*r,dn=(c-a)*r,h=Math.sin(dl/2)**2+Math.cos(b*r)*Math.cos(d*r)*Math.sin(dn/2)**2;
+    s+=2*R*Math.asin(Math.sqrt(h));}return s;}
+DATA.features.forEach(f=>f.properties.km=km(f.geometry.coordinates));
+
+/* ============ MAPA ============ */
+const map=L.map('map',{zoomControl:true}).setView([-34.5,-68.5],6);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap, © CARTO',maxZoom:18}).addTo(map);
+const estilo={Nacional:{color:'#ffc800',weight:5},Primaria:{color:'#26262a',weight:3},Secundaria:{color:'#9b9a96',weight:2}};
+let capa;
+function dibujar(fs){
+  if(capa)capa.remove();
+  capa=L.geoJSON({type:'FeatureCollection',features:fs},{
+    style:f=>estilo[f.properties.jur],
+    onEachFeature:(f,l)=>{const p=f.properties;
+      l.bindPopup(`<b>${p.nombre}</b><br>${p.jur} · ${p.mat}<br>Estado: ${p.est}<br>${p.depto} · ${fmt(p.km)}`);
+      l.on('mouseover',()=>l.setStyle({weight:estilo[p.jur].weight+3}));
+      l.on('mouseout',()=>l.setStyle(estilo[p.jur]));}
+  }).addTo(map);
+  if(fs.length)map.fitBounds(capa.getBounds(),{padding:[30,30]});
+}
+
+/* ============ GRÁFICOS ============ */
+const col={Bueno:'#5aa832',Regular:'#ffc800',Malo:'#e0353b'};
+const opt={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}};
+const cMat=new Chart(cMatEl(),{type:'bar',data:{labels:['Pavimento','Consolidado','Suelo natural'],datasets:[{data:[0,0,0],backgroundColor:'#ffc800'}]},
+  options:{...opt,indexAxis:'y',scales:{x:{beginAtZero:true,grid:{display:false}},y:{grid:{display:false}}}}});
+const cEst=new Chart(document.getElementById('cEst'),{type:'doughnut',data:{labels:['Bueno','Regular','Malo'],datasets:[{data:[0,0,0],backgroundColor:Object.values(col),borderWidth:0}]},options:{...opt,cutout:'62%'}});
+const cJur=new Chart(document.getElementById('cJur'),{type:'doughnut',data:{labels:['Red Nacional','Red Provincial'],datasets:[{data:[0,0],backgroundColor:['#26262a','#ffc800'],borderWidth:0}]},options:{...opt,cutout:'62%'}});
+function cMatEl(){return document.getElementById('cMat')}
+
+function leyenda(el,items,total){
+  el.innerHTML=items.map(([n,v,c])=>`<li><i style="background:${c}"></i>${n}<em>${fmt(v)} (${pc(v,total)})</em></li>`).join('');
+}
+
+/* ============ ESTADÍSTICAS ============ */
+function stats(fs){
+  const s=(fn)=>fs.filter(fn).reduce((a,f)=>a+f.properties.km,0);
+  const tot=s(()=>true),nac=s(f=>f.properties.jur==='Nacional'),pri=s(f=>f.properties.jur==='Primaria'),sec=s(f=>f.properties.jur==='Secundaria');
+  kTot.textContent=fmt(tot);kNac.textContent=fmt(nac);kPri.textContent=fmt(pri);kSec.textContent=fmt(sec);
+  cMat.data.datasets[0].data=['Pavimento','Consolidado','Suelo natural'].map(m=>+s(f=>f.properties.mat===m).toFixed(1));cMat.update();
+  const pav=s(f=>f.properties.mat==='Pavimento');
+  const est=['Bueno','Regular','Malo'].map(e=>s(f=>f.properties.mat==='Pavimento'&&f.properties.est===e));
+  cEst.data.datasets[0].data=est.map(v=>+v.toFixed(1));cEst.update();
+  leyenda(lEst,['Bueno','Regular','Malo'].map((e,i)=>[e,est[i],col[e]]),pav);
+  cJur.data.datasets[0].data=[+nac.toFixed(1),+(pri+sec).toFixed(1)];cJur.update();
+  leyenda(lJur,[['Red Nacional',nac,'#26262a'],['Red Provincial (Primaria + Secundaria)',pri+sec,'#ffc800']],tot);
+}
+
+/* ============ FILTROS ============ */
+const selDepto=document.getElementById('selDepto'),selRuta=document.getElementById('selRuta');
+const uniq=a=>[...new Set(a)].sort((x,y)=>x.localeCompare(y,'es'));
+const opts=(el,list,todo)=>el.innerHTML=`<option value="">${todo}</option>`+list.map(v=>`<option>${v}</option>`).join('');
+opts(selDepto,uniq(DATA.features.map(f=>f.properties.depto)),'Todos');
+function llenarRutas(){
+  const d=selDepto.value;
+  opts(selRuta,uniq(DATA.features.filter(f=>!d||f.properties.depto===d).map(f=>f.properties.nombre)),'Todas');
+}
+function aplicar(){
+  const d=selDepto.value,r=selRuta.value;
+  const fs=DATA.features.filter(f=>(!d||f.properties.depto===d)&&(!r||f.properties.nombre===r));
+  dibujar(fs);stats(fs);
+}
+selDepto.onchange=()=>{llenarRutas();aplicar()};
+selRuta.onchange=aplicar;
+llenarRutas();aplicar();
+
+/* ============ PESTAÑAS ============ */
+document.getElementById('tabs').addEventListener('click',e=>{
+  const b=e.target.closest('.tab');if(!b)return;
+  document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t===b));
+  const rutas=b.dataset.t==='Rutas';
+  tSmall.textContent='Inventario: '+b.dataset.t;
+  stats_.style.display=rutas?'flex':'none';soon.style.display=rutas?'none':'block';
+});
+const stats_=document.getElementById('stats'),soon=document.getElementById('soon'),tSmall=document.getElementById('tSmall');
+</script>
+</body>
+</html>
